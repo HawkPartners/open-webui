@@ -9,7 +9,7 @@
 	import { ldapUserSignIn, getSessionUser, userSignIn, userSignUp } from '$lib/apis/auths';
 
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
-	import { WEBUI_NAME, config, user, socket, theme } from '$lib/stores';
+	import { WEBUI_NAME, config, user, socket } from '$lib/stores';
 
 	import { generateInitialsImage, canvasPixelTest } from '$lib/utils';
 
@@ -115,28 +115,33 @@
 
 	let onboarding = false;
 
-	// Create a reactive logo source that changes with the theme
-	$: logoSrc = $theme.includes('dark') || 
-	             ($theme === 'system' && window?.matchMedia?.('(prefers-color-scheme: dark)')?.matches) 
-	             ? '/favicon.png' 
-	             : '/favicon-dark.png';
-
 	async function setLogoImage() {
 		await tick();
 		const logo = document.getElementById('logo');
-		if (logo && logoSrc) {
-			logo.src = logoSrc;
-		}
-	}
 
-	// Update logo when theme changes
-	$: if ($theme && loaded) {
-		setTimeout(setLogoImage, 0);
+		if (logo) {
+			const isDarkMode = document.documentElement.classList.contains('dark');
+
+			if (isDarkMode) {
+				const darkImage = new Image();
+				darkImage.src = '/static/favicon-dark.png';
+
+				darkImage.onload = () => {
+					logo.src = '/static/favicon-dark.png';
+					logo.style.filter = ''; // Ensure no inversion is applied if favicon-dark.png exists
+				};
+
+				darkImage.onerror = () => {
+					logo.style.filter = 'invert(1)'; // Invert image if favicon-dark.png is missing
+				};
+			}
+		}
 	}
 
 	onMount(async () => {
 		if ($user !== undefined) {
-			await goto('/');
+			const redirectPath = querystringValue('redirect') || '/';
+			goto(redirectPath);
 		}
 		await checkOauthCallback();
 
@@ -177,7 +182,7 @@
 					<img
 						id="logo"
 						crossorigin="anonymous"
-						src={logoSrc}
+						src="{WEBUI_BASE_URL}/static/splash.png"
 						class=" w-6 rounded-full"
 						alt="logo"
 					/>

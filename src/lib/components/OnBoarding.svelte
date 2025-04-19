@@ -3,7 +3,6 @@
 	const i18n = getContext('i18n');
 
 	import { WEBUI_BASE_URL } from '$lib/constants';
-	import { theme } from '$lib/stores';  // Import the theme store
 
 	import Marquee from './common/Marquee.svelte';
 	import SlideShow from './common/SlideShow.svelte';
@@ -12,27 +11,30 @@
 	export let show = true;
 	export let getStartedHandler = () => {};
 
-	// 1. Make the logo directly subscribe to the theme store
-	$: logoSrc = $theme.includes('dark') || 
-	             ($theme === 'system' && window?.matchMedia('(prefers-color-scheme: dark)').matches) 
-	             ? '/favicon-dark.png' 
-	             : '/favicon-dark.png';
-
 	function setLogoImage() {
 		const logo = document.getElementById('logo');
-		if (logo && logoSrc) {
-			logo.src = logoSrc;
+
+		if (logo) {
+			const isDarkMode = document.documentElement.classList.contains('dark');
+
+			if (isDarkMode) {
+				const darkImage = new Image();
+				darkImage.src = '/static/favicon-dark.png';
+
+				darkImage.onload = () => {
+					logo.src = '/static/favicon-dark.png';
+					logo.style.filter = ''; // Ensure no inversion is applied if splash-dark.png exists
+				};
+
+				darkImage.onerror = () => {
+					logo.style.filter = 'invert(1)'; // Invert image if splash-dark.png is missing
+				};
+			}
 		}
 	}
 
-	// Update logo when theme changes or component is shown
-	$: if (show && logoSrc) {
-		setTimeout(setLogoImage, 0); // Use setTimeout to ensure DOM is ready
-	}
-
-	// Also update on theme changes
-	$: if ($theme && show) {
-		setTimeout(setLogoImage, 0);
+	$: if (show) {
+		setLogoImage();
 	}
 </script>
 
@@ -44,7 +46,7 @@
 					<img
 						id="logo"
 						crossorigin="anonymous"
-						src={logoSrc}
+						src="{WEBUI_BASE_URL}/static/favicon.png"
 						class=" w-6 rounded-full"
 						alt="logo"
 					/>
