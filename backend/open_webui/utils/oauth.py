@@ -3,6 +3,7 @@ import logging
 import mimetypes
 import sys
 import uuid
+import os
 
 import aiohttp
 from authlib.integrations.starlette_client import OAuth
@@ -434,5 +435,6 @@ class OAuthManager:
                 secure=WEBUI_AUTH_COOKIE_SECURE,
             )
         # Redirect back to the frontend with the JWT token
-        redirect_url = f"{request.base_url}auth#token={jwt_token}"
+        redirect_url = os.environ.get("WEBUI_URL", "https://hawkgpt-openwebui-prod-endpoiont-hvdwbbepgncshsg4.z03.azurefd.net")
+        redirect_url = f"{redirect_url}/auth#token={jwt_token}"
         return RedirectResponse(url=redirect_url, headers=response.headers)
