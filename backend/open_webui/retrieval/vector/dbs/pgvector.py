@@ -278,9 +278,7 @@ class PgvectorClient:
             for row in results:
                 qid = int(row.qid)
                 ids[qid].append(row.id)
-                # normalize and re-orders pgvec distance from [2, 0] to [0, 1] score range
-                # https://github.com/pgvector/pgvector?tab=readme-ov-file#querying
-                distances[qid].append((2.0 - row.distance) / 2.0)
+                distances[qid].append(row.distance)
                 documents[qid].append(row.text)
                 metadatas[qid].append(row.vmetadata)
 

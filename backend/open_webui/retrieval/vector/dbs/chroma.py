@@ -75,16 +75,10 @@ class ChromaClient:
                     n_results=limit,
                 )
 
-                # chromadb has cosine distance, 2 (worst) -> 0 (best). Re-odering to 0 -> 1
-                # https://docs.trychroma.com/docs/collections/configure cosine equation
-                distances: list = result["distances"][0]
-                distances = [2 - dist for dist in distances]
-                distances = [[dist / 2 for dist in distances]]
-
                 return SearchResult(
                     **{
                         "ids": result["ids"],
-                        "distances": distances,
+                        "distances": result["distances"],
                         "documents": result["documents"],
                         "metadatas": result["metadatas"],
                     }
@@ -172,19 +166,12 @@ class ChromaClient:
         filter: Optional[dict] = None,
     ):
         # Delete the items from the collection based on the ids.
-        try:
-            collection = self.client.get_collection(name=collection_name)
-            if collection:
-                if ids:
-                    collection.delete(ids=ids)
-                elif filter:
-                    collection.delete(where=filter)
-        except Exception as e:
-            # If collection doesn't exist, that's fine - nothing to delete
-            log.debug(
-                f"Attempted to delete from non-existent collection {collection_name}. Ignoring."
-            )
-            pass
+        collection = self.client.get_collection(name=collection_name)
+        if collection:
+            if ids:
+                collection.delete(ids=ids)
+            elif filter:
+                collection.delete(where=filter)
 
     def reset(self):
         # Resets the database. This will delete all collections and item entries.
