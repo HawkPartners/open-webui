@@ -67,7 +67,7 @@
 	import { generateOpenAIChatCompletion } from '$lib/apis/openai';
 	import { processWeb, processWebSearch, processYoutubeVideo } from '$lib/apis/retrieval';
 	import { createOpenAITextStream } from '$lib/apis/streaming';
-	import { queryMemory } from '$lib/apis/memories';
+	import { getMemories } from '$lib/apis/memories';
 	import { getAndUpdateUserLocation, getUserSettings } from '$lib/apis/users';
 	import {
 		chatCompleted,
@@ -1444,23 +1444,19 @@
 					let userContext = null;
 					if ($settings?.memory ?? false) {
 						if (userContext === null) {
-							const res = await queryMemory(localStorage.token, prompt).catch((error) => {
+							const res = await getMemories(localStorage.token).catch((error) => {
 								toast.error(`${error}`);
 								return null;
 							});
-							if (res) {
-								if (res.documents[0].length > 0) {
-									userContext = res.documents[0].reduce((acc, doc, index) => {
-										const createdAtTimestamp = res.metadatas[0][index].created_at;
-										const createdAtDate = new Date(createdAtTimestamp * 1000)
-											.toISOString()
-											.split('T')[0];
-										return `${acc}${index + 1}. [${createdAtDate}]. ${doc}\n`;
-									}, '');
-								}
-
-								console.log(userContext);
+							if (res && res.length > 0) {
+								userContext = res.reduce((acc, memory, index) => {
+									const createdAtDate = new Date(memory.created_at * 1000)
+										.toISOString()
+										.split('T')[0];
+									return `${acc}${index + 1}. [${createdAtDate}]. ${memory.content}\n`;
+								}, '');
 							}
+							console.log(userContext);
 						}
 					}
 					responseMessage.userContext = userContext;

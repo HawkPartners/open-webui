@@ -1856,10 +1856,12 @@ async def process_chat_response(
                 MAX_TOOL_CALL_RETRIES = 10
                 tool_call_retries = 0
 
+                print(f"[LOG] Main tool processing loop starting. {len(tool_calls)} sets of tool calls initially queued.")
                 while len(tool_calls) > 0 and tool_call_retries < MAX_TOOL_CALL_RETRIES:
                     tool_call_retries += 1
 
                     response_tool_calls = tool_calls.pop(0)
+                    print(f"[LOG] Popped a set of tool calls with {len(response_tool_calls)} calls.")
 
                     content_blocks.append(
                         {
@@ -1880,34 +1882,45 @@ async def process_chat_response(
                     tools = metadata.get("tools", {})
 
                     results = []
-                    for tool_call in response_tool_calls:
+                    print(f"[LOG] Inner loop starting for {len(response_tool_calls)} tool calls in this set.")
+                    for idx, tool_call in enumerate(response_tool_calls):
                         tool_call_id = tool_call.get("id", "")
                         tool_name = tool_call.get("function", {}).get("name", "")
+                        print(f"[LOG] Processing tool call {idx}: name={tool_name}, id={tool_call_id}")
 
                         tool_function_params = {}
+                        raw_args = tool_call.get("function", {}).get("arguments", "{}")
+                        print(f"[LOG] Raw arguments for tool call {idx}: {raw_args}")
                         try:
                             # json.loads cannot be used because some models do not produce valid JSON
-                            tool_function_params = ast.literal_eval(
-                                tool_call.get("function", {}).get("arguments", "{}")
-                            )
+                            tool_function_params = ast.literal_eval(raw_args)
+                            print(f"[LOG] ast.literal_eval succeeded for tool call {idx}.")
                         except Exception as e:
-                            log.debug(e)
+                            print(f"[LOG] ast.literal_eval failed for tool call {idx}: {e}")
                             # Fallback to JSON parsing
                             try:
-                                tool_function_params = json.loads(
-                                    tool_call.get("function", {}).get("arguments", "{}")
-                                )
-                            except Exception as e:
+                                tool_function_params = json.loads(raw_args)
+                                print(f"[LOG] json.loads succeeded for tool call {idx}.")
+                            except Exception as e2:
+                                print(f"[LOG] json.loads failed for tool call {idx}: {e2}")
                                 log.debug(
-                                    f"Error parsing tool call arguments: {tool_call.get('function', {}).get('arguments', '{}')}"
+                                    f"Error parsing tool call arguments: {raw_args}"
                                 )
 
-                        tool_result = None
-
+                        # Tool lookup with normalization
+                        normalized_tool_name = tool_name
                         if tool_name in tools:
                             tool = tools[tool_name]
+                        elif f"tool_{tool_name}" in tools:
+                            normalized_tool_name = f"tool_{tool_name}"
+                            tool = tools[normalized_tool_name]
+                            print(f"[LOG] Tool name normalized from '{tool_name}' to '{normalized_tool_name}'")
+                        else:
+                            print(f"[LOG] Tool '{tool_name}' not found in tools dict, even with tool_ prefix")
+                            tool = None
+                        if tool:
                             spec = tool.get("spec", {})
-
+                            print(f"[LOG] Tool spec found for '{normalized_tool_name}'. Direct/server call: {tool.get('direct', False)}")
                             try:
                                 allowed_params = (
                                     spec.get("parameters", {})
@@ -1915,20 +1928,22 @@ async def process_chat_response(
                                     .keys()
                                 )
 
-                                tool_function_params = {
+                                filtered_params = {
                                     k: v
                                     for k, v in tool_function_params.items()
                                     if k in allowed_params
                                 }
+                                print(f"[LOG] Filtered params for tool '{normalized_tool_name}': {filtered_params}")
 
                                 if tool.get("direct", False):
+                                    print(f"[LOG] About to call event_caller for tool '{normalized_tool_name}' (id={tool_call_id}) with params: {filtered_params}")
                                     tool_result = await event_caller(
                                         {
                                             "type": "execute:tool",
                                             "data": {
                                                 "id": str(uuid4()),
-                                                "name": tool_name,
-                                                "params": tool_function_params,
+                                                "name": normalized_tool_name,
+                                                "params": filtered_params,
                                                 "server": tool.get("server", {}),
                                                 "session_id": metadata.get(
                                                     "session_id", None
@@ -1936,15 +1951,20 @@ async def process_chat_response(
                                             },
                                         }
                                     )
-
+                                    print(f"[LOG] event_caller completed for tool '{normalized_tool_name}' (id={tool_call_id})")
                                 else:
                                     tool_function = tool["callable"]
+                                    print(f"[LOG] About to call local tool function for '{normalized_tool_name}' (id={tool_call_id}) with params: {filtered_params}")
                                     tool_result = await tool_function(
-                                        **tool_function_params
+                                        **filtered_params
                                     )
+                                    print(f"[LOG] Local tool function completed for '{normalized_tool_name}' (id={tool_call_id})")
 
-                            except Exception as e:
-                                tool_result = str(e)
+                            except Exception as e_exec:
+                                print(f"[LOG] Tool execution failed for '{normalized_tool_name}' (id={tool_call_id}): {e_exec}")
+                                tool_result = str(e_exec)
+                        else:
+                            print(f"[LOG] Tool '{tool_name}' not found in tools dict.")
 
                         tool_result_files = []
                         if isinstance(tool_result, list):
@@ -1958,7 +1978,8 @@ async def process_chat_response(
                             tool_result, list
                         ):
                             tool_result = json.dumps(tool_result, indent=2)
-
+                        print(f"[LOG] Tool result for '{normalized_tool_name}' (id={tool_call_id}): {str(tool_result)[:100]}{'...' if tool_result and len(str(tool_result)) > 100 else ''}")
+                        print(f"[LOG] Appending result for tool '{normalized_tool_name}' (id={tool_call_id}) to results list.")
                         results.append(
                             {
                                 "tool_call_id": tool_call_id,
@@ -1970,8 +1991,10 @@ async def process_chat_response(
                                 ),
                             }
                         )
+                    print(f"[LOG] Inner loop finished processing all {len(response_tool_calls)} tool calls in this set.")
 
                     content_blocks[-1]["results"] = results
+                    print(f"[LOG] Added {len(results)} results to the content block.")
 
                     content_blocks.append(
                         {
@@ -1990,6 +2013,7 @@ async def process_chat_response(
                     )
 
                     try:
+                        print(f"[LOG] About to call generate_chat_completion with tool results.")
                         res = await generate_chat_completion(
                             request,
                             {
@@ -2003,195 +2027,20 @@ async def process_chat_response(
                             },
                             user,
                         )
+                        print(f"[LOG] generate_chat_completion call succeeded.")
 
                         if isinstance(res, StreamingResponse):
+                            print(f"[LOG] Processing response from LLM (after tool calls) with stream_body_handler.")
                             await stream_body_handler(res)
                         else:
+                            print(f"[LOG] Processing non-streaming response from LLM (after tool calls). Breaking loop.")
                             break
-                    except Exception as e:
-                        log.debug(e)
+                    except Exception as e_gen:
+                        print(f"[LOG] generate_chat_completion call failed: {e_gen}")
+                        log.debug(e_gen)
                         break
 
-                if DETECT_CODE_INTERPRETER:
-                    MAX_RETRIES = 5
-                    retries = 0
-
-                    while (
-                        content_blocks[-1]["type"] == "code_interpreter"
-                        and retries < MAX_RETRIES
-                    ):
-                        await event_emitter(
-                            {
-                                "type": "chat:completion",
-                                "data": {
-                                    "content": serialize_content_blocks(content_blocks),
-                                },
-                            }
-                        )
-
-                        retries += 1
-                        log.debug(f"Attempt count: {retries}")
-
-                        output = ""
-                        try:
-                            if content_blocks[-1]["attributes"].get("type") == "code":
-                                code = content_blocks[-1]["content"]
-
-                                if (
-                                    request.app.state.config.CODE_INTERPRETER_ENGINE
-                                    == "pyodide"
-                                ):
-                                    output = await event_caller(
-                                        {
-                                            "type": "execute:python",
-                                            "data": {
-                                                "id": str(uuid4()),
-                                                "code": code,
-                                                "session_id": metadata.get(
-                                                    "session_id", None
-                                                ),
-                                            },
-                                        }
-                                    )
-                                elif (
-                                    request.app.state.config.CODE_INTERPRETER_ENGINE
-                                    == "jupyter"
-                                ):
-                                    output = await execute_code_jupyter(
-                                        request.app.state.config.CODE_INTERPRETER_JUPYTER_URL,
-                                        code,
-                                        (
-                                            request.app.state.config.CODE_INTERPRETER_JUPYTER_AUTH_TOKEN
-                                            if request.app.state.config.CODE_INTERPRETER_JUPYTER_AUTH
-                                            == "token"
-                                            else None
-                                        ),
-                                        (
-                                            request.app.state.config.CODE_INTERPRETER_JUPYTER_AUTH_PASSWORD
-                                            if request.app.state.config.CODE_INTERPRETER_JUPYTER_AUTH
-                                            == "password"
-                                            else None
-                                        ),
-                                        request.app.state.config.CODE_INTERPRETER_JUPYTER_TIMEOUT,
-                                    )
-                                else:
-                                    output = {
-                                        "stdout": "Code interpreter engine not configured."
-                                    }
-
-                                log.debug(f"Code interpreter output: {output}")
-
-                                if isinstance(output, dict):
-                                    stdout = output.get("stdout", "")
-
-                                    if isinstance(stdout, str):
-                                        stdoutLines = stdout.split("\n")
-                                        for idx, line in enumerate(stdoutLines):
-                                            if "data:image/png;base64" in line:
-                                                id = str(uuid4())
-
-                                                # ensure the path exists
-                                                os.makedirs(
-                                                    os.path.join(CACHE_DIR, "images"),
-                                                    exist_ok=True,
-                                                )
-
-                                                image_path = os.path.join(
-                                                    CACHE_DIR,
-                                                    f"images/{id}.png",
-                                                )
-
-                                                with open(image_path, "wb") as f:
-                                                    f.write(
-                                                        base64.b64decode(
-                                                            line.split(",")[1]
-                                                        )
-                                                    )
-
-                                                stdoutLines[idx] = (
-                                                    f"![Output Image {idx}](/cache/images/{id}.png)"
-                                                )
-
-                                        output["stdout"] = "\n".join(stdoutLines)
-
-                                    result = output.get("result", "")
-
-                                    if isinstance(result, str):
-                                        resultLines = result.split("\n")
-                                        for idx, line in enumerate(resultLines):
-                                            if "data:image/png;base64" in line:
-                                                id = str(uuid4())
-
-                                                # ensure the path exists
-                                                os.makedirs(
-                                                    os.path.join(CACHE_DIR, "images"),
-                                                    exist_ok=True,
-                                                )
-
-                                                image_path = os.path.join(
-                                                    CACHE_DIR,
-                                                    f"images/{id}.png",
-                                                )
-
-                                                with open(image_path, "wb") as f:
-                                                    f.write(
-                                                        base64.b64decode(
-                                                            line.split(",")[1]
-                                                        )
-                                                    )
-
-                                                resultLines[idx] = (
-                                                    f"![Output Image {idx}](/cache/images/{id}.png)"
-                                                )
-
-                                        output["result"] = "\n".join(resultLines)
-                        except Exception as e:
-                            output = str(e)
-
-                        content_blocks[-1]["output"] = output
-
-                        content_blocks.append(
-                            {
-                                "type": "text",
-                                "content": "",
-                            }
-                        )
-
-                        await event_emitter(
-                            {
-                                "type": "chat:completion",
-                                "data": {
-                                    "content": serialize_content_blocks(content_blocks),
-                                },
-                            }
-                        )
-
-                        try:
-                            res = await generate_chat_completion(
-                                request,
-                                {
-                                    "model": model_id,
-                                    "stream": True,
-                                    "messages": [
-                                        *form_data["messages"],
-                                        {
-                                            "role": "assistant",
-                                            "content": serialize_content_blocks(
-                                                content_blocks, raw=True
-                                            ),
-                                        },
-                                    ],
-                                },
-                                user,
-                            )
-
-                            if isinstance(res, StreamingResponse):
-                                await stream_body_handler(res)
-                            else:
-                                break
-                        except Exception as e:
-                            log.debug(e)
-                            break
+                print(f"[LOG] Main tool processing loop exited.")
 
                 title = Chats.get_chat_title_by_id(metadata["chat_id"])
                 data = {
