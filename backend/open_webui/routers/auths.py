@@ -475,6 +475,10 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
         )
 
         if user:
+            # Enable memory by default and create default memory
+            Users.update_user_settings_by_id(user.id, {"memory": True})
+            Users.update_user_by_id(user.id, {"info": {"memories": [{"content": f"User's Name: {form_data.name}"}]}})
+
             expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
             expires_at = None
             if expires_delta:
