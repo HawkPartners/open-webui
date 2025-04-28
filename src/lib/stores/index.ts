@@ -62,7 +62,7 @@ export const toolServers = writable([]);
 
 export const banners: Writable<Banner[]> = writable([]);
 
-export const settings: Writable<Settings> = writable({});
+export const settings: Writable<Settings> = writable({ memory: true });
 
 export const showSidebar = writable(false);
 export const showSettings = writable(false);
@@ -156,6 +156,7 @@ type Settings = {
 	num_batch?: string;
 	num_keep?: string;
 	options?: ModelOptions;
+	memory: boolean;
 };
 
 type ModelOptions = {

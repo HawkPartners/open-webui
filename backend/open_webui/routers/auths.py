@@ -19,6 +19,7 @@ from open_webui.models.auths import (
     UserResponse,
 )
 from open_webui.models.users import Users
+from open_webui.models.memories import Memories
 
 from open_webui.constants import ERROR_MESSAGES, WEBHOOK_MESSAGES
 from open_webui.env import (
@@ -475,9 +476,13 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
         )
 
         if user:
-            # Enable memory by default and create default memory
-            Users.update_user_settings_by_id(user.id, {"memory": True})
-            Users.update_user_by_id(user.id, {"info": {"memories": [{"content": f"User's Name: {form_data.name}"}]}})
+            # Enable memory by default (ensure merge with existing settings)
+            current_settings = user.settings if user.settings else {}
+            current_settings["memory"] = True
+            Users.update_user_settings_by_id(user.id, current_settings)
+
+            # Add a default memory for the user using the Memories model
+            Memories.insert_new_memory(user.id, f"User's Name: {form_data.name}")
 
             expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
             expires_at = None

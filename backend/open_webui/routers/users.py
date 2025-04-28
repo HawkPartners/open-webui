@@ -178,7 +178,11 @@ async def get_user_settings_by_session_user(user=Depends(get_verified_user)):
 async def update_user_settings_by_session_user(
     form_data: UserSettings, user=Depends(get_verified_user)
 ):
-    user = Users.update_user_settings_by_id(user.id, form_data.model_dump())
+    prev_settings = user.settings if user.settings else {}
+    new_settings = form_data.model_dump()
+    if "memory" in new_settings:
+        log.info(f"User {user.id} toggled memory setting: {prev_settings.get('memory')} -> {new_settings['memory']}")
+    user = Users.update_user_settings_by_id(user.id, new_settings)
     if user:
         return user.settings
     else:

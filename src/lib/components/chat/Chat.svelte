@@ -1442,7 +1442,7 @@
 					let responseMessage = _history.messages[responseMessageId];
 
 					let userContext = null;
-					if ($settings?.memory ?? false) {
+					if ($settings?.memory ?? true) {
 						if (userContext === null) {
 							const res = await getMemories(localStorage.token).catch((error) => {
 								toast.error(`${error}`);

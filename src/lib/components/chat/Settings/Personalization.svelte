@@ -16,10 +16,10 @@
 	let showManageModal = false;
 
 	// Addons
-	let enableMemory = false;
+	let enableMemory = true;
 
 	onMount(async () => {
-		enableMemory = $settings?.memory ?? false;
+		enableMemory = $settings?.memory ?? true;
 	});
 </script>
 
@@ -36,13 +36,11 @@
 			<div class="flex items-center justify-between mb-1">
 				<Tooltip
 					content={$i18n.t(
-						'This is an experimental feature, it may not function as expected and is subject to change at any time.'
+						'This must be enabled for HawkGPT to work properly. This allows the model to validate your name with the list of conflicts of interest that we track at HawkPartners.'
 					)}
 				>
 					<div class="text-sm font-medium">
-						{$i18n.t('Memory')}
-
-						<span class=" text-xs text-gray-500">({$i18n.t('Experimental')})</span>
+						{$i18n.t('Conflict of Interest Tracking')}
 					</div>
 				</Tooltip>
 
@@ -60,17 +58,17 @@
 		<div class="text-xs text-gray-600 dark:text-gray-400">
 			<div>
 				{$i18n.t(
-					"You can personalize your interactions with LLMs by adding memories through the 'Manage' button below, making them more helpful and tailored to you."
+					'This must be enabled for HawkGPT to work properly. This allows the model to validate your name with the list of conflicts of interest that we track at HawkPartners.'
 				)}
 			</div>
 
 			<!-- <div class="mt-3">
 				To understand what LLM remembers or teach it something new, just chat with it:
 
-				<div>- “Remember that I like concise responses.”</div>
-				<div>- “I just got a puppy!”</div>
-				<div>- “What do you remember about me?”</div>
-				<div>- “Where did we leave off on my last project?”</div>
+				<div>- "Remember that I like concise responses."</div>
+				<div>- "I just got a puppy!"</div>
+				<div>- "What do you remember about me?"</div>
+				<div>- "Where did we leave off on my last project?"</div>
 			</div> -->
 		</div>
 
