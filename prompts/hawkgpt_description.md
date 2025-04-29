@@ -1,1 +1,1 @@
-HawkGPT is a closed-loop, compliant Gen AI tool powered by Azure OpenAI GPT-4o-mini. Client data isn’t used for training. **For Internal use only.**
+HawkGPT is a closed-loop, compliant Gen AI tool powered by GPT-4.1-mini. Client data isn’t used for training. **For Internal use only.**
